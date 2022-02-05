@@ -11,7 +11,7 @@ $INSTALL_BASE = <<SCRIPT
   apt-get -y install xauth
   apt-get -y install libzeroc-ice35-dev libboost-all-dev
 
-  easy_install pip
+  apt-get -y install python-pip
 
   rm -Rf /opt/pox
   mkdir -p /opt/pox
@@ -27,7 +27,7 @@ $INSTALL_BASE = <<SCRIPT
 SCRIPT
 
 Vagrant.configure(2) do |config|
-  config.vm.box = "boxcutter/ubuntu1604"
+  config.vm.box = "ubuntu/xenial64"
 
   config.vm.provider "virtualbox" do |vb|
   #   # Display the VirtualBox GUI when booting the machine

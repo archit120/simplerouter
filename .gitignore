@@ -5,3 +5,6 @@ router
 *.o
 *.dSYM
 .vagrant
+
+
+*.log
