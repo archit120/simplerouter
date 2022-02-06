@@ -37,8 +37,38 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   std::cerr << getRoutingTable() << std::endl;
 
-  // FILL THIS IN
+// TODO
 
+  const ethernet_hdr* header = reinterpret_cast<const ethernet_hdr*>(packet.data());
+
+  if(ethertype(packet.data()) != 0x0806 && ethertype(packet.data()) != 0x0800) {
+    std::cerr << "Received packet, but type is unknwon, ignoring." << std::endl;
+    return;
+  }
+
+  if(memcmp(header->ether_dhost, iface->addr.data(), ETHER_ADDR_LEN) && !isBroadcastMAC(header->ether_dhost)) {
+    std::cerr << "Received packet, but incorrect MAC, ignoring." << std::endl;
+    return;
+  }
+
+// Handle ARP Packets first
+
+  if(ethertype(packet.data()) == ethertype_arp) {
+    const arp_hdr* arpHeader = reinterpret_cast<const arp_hdr*>(header+1);
+    // is it an ARP reply?
+    if(arpHeader->arp_op == arp_op_reply) {
+      auto requests = m_arp.insertArpEntry(createMACBuffer(arpHeader->arp_sha), arpHeader->arp_sip);
+      if(requests == nullptr)
+        return;
+      for(auto packet : requests->packets) {
+        // Rehandle all queued up packets
+        handlePacket(packet, inIface);
+      }
+    } else {
+      
+    }
+  }
+  
 }
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
