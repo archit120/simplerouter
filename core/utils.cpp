@@ -62,6 +62,44 @@ uint8_t ip_protocol(const uint8_t* buf) {
   return iphdr->ip_p;
 }
 
+bool isBroadcastMAC(const uint8_t* buf) {
+  for(int i = 0;i<ETHER_ADDR_LEN;i++)
+    if(buf[i]!=255)
+      return false;
+  return true;
+}
+
+Buffer createMACBuffer(const uint8_t mac[ETHER_ADDR_LEN]) {
+  Buffer ret(ETHER_ADDR_LEN);
+  for(int i = 0;i<ETHER_ADDR_LEN;i++)
+    ret[i] = mac[i];
+  return ret;
+}
+
+
+Buffer createEthernetHeader(const uint8_t source_mac[ETHER_ADDR_LEN], 
+                            const uint8_t dest_mac[ETHER_ADDR_LEN],
+                            bool ip) {
+  ethernet_hdr hdr;
+
+}
+
+Buffer createARPHeader(bool request) {
+  arp_hdr hdr;
+  hdr.arp_hrd = htons(arp_hrd_ethernet);
+  hdr.arp_pro = htons(0x0800);
+  hdr.arp_op = request ? 1 : 2;
+  hdr.arp_hln = 6;
+  hdr.arp_pln = 4;
+  if(request) {
+    for(int i = 0;i<ETHER_ADDR_LEN;i++)
+      hdr.arp_tha[i] = 255;
+  }
+  else {
+    
+  }
+}
+
 
 std::string
 macToString(const Buffer& macAddr)
