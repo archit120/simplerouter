@@ -61,6 +61,7 @@ struct icmp_hdr {
   uint8_t icmp_type;
   uint8_t icmp_code;
   uint16_t icmp_sum;
+  // uint16_t identifier
 } __attribute__ ((packed)) ;
 
 

@@ -37,7 +37,21 @@ namespace simple_router {
 uint16_t cksum(const void* data, int len);
 uint16_t ethertype(const uint8_t* buf);
 uint8_t ip_protocol(const uint8_t* buf);
-
+bool isBroadcastMAC(const uint8_t* buf);
+Buffer createMACBuffer(const uint8_t mac[ETHER_ADDR_LEN]);
+Buffer createARPPacket(bool request, const uint8_t source_mac[ETHER_ADDR_LEN], 
+                            uint32_t source_ip,
+                            const uint8_t dest_mac[ETHER_ADDR_LEN],
+                            uint32_t dest_ip);
+Buffer createIPPacket(const uint8_t source_mac[ETHER_ADDR_LEN], 
+                            uint32_t source_ip,
+                            const uint8_t dest_mac[ETHER_ADDR_LEN],
+                            uint32_t dest_ip,
+                            const uint8_t* data,
+                            uint16_t data_size,
+                            uint8_t ttl, uint8_t protocol
+                            );
+Buffer getICMPResponse();
 /**
  * Get formatted Ethernet address, e.g. 00:11:22:33:44:55
  */
