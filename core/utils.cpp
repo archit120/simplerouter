@@ -81,23 +81,66 @@ Buffer createEthernetHeader(const uint8_t source_mac[ETHER_ADDR_LEN],
                             const uint8_t dest_mac[ETHER_ADDR_LEN],
                             bool ip) {
   ethernet_hdr hdr;
-
+  memcpy(hdr.ether_shost, source_mac, ETHER_ADDR_LEN);
+  memcpy(hdr.ether_dhost, dest_mac, ETHER_ADDR_LEN);
+  hdr.ether_type = htons(ip ? ethertype_ip:ethertype_arp);
+  Buffer ret(sizeof(ethernet_hdr));
+  memcpy(ret.data(), &hdr, sizeof(ethernet_hdr));
+  return ret;
 }
 
-Buffer createARPHeader(bool request) {
+Buffer getBroadcastMac() {
+  Buffer ret(ETHER_ADDR_LEN, 255);
+  return ret;
+}
+
+Buffer createIPPacket(const uint8_t source_mac[ETHER_ADDR_LEN], 
+                            uint32_t source_ip,
+                            const uint8_t dest_mac[ETHER_ADDR_LEN],
+                            uint32_t dest_ip,
+                            const uint8_t* data,
+                            uint16_t data_size,
+                            uint8_t ttl, uint8_t protocol
+                            ) {
+  ip_hdr hdr;
+  hdr.ip_v = 4;
+  hdr.ip_hl = 5;
+  hdr.ip_tos = 0;
+  hdr.ip_len = htons(data_size+sizeof(ip_hdr));
+  hdr.ip_off = IP_DF;
+  hdr.ip_ttl = ttl;
+  hdr.ip_p = protocol;
+  hdr.ip_sum = 0;
+  hdr.ip_src = source_ip;
+  hdr.ip_dst = dest_ip;
+  Buffer ret = createEthernetHeader(source_mac, dest_mac, false);
+  ret.resize(ret.size() + sizeof(ip_hdr) + data_size);
+  memcpy(ret.data()+sizeof(ethernet_hdr), &hdr, sizeof(ip_hdr));
+  memcpy(ret.data()+sizeof(ethernet_hdr)+sizeof(ip_hdr), data, data_size);
+  hdr.ip_sum = cksum(ret.data()+sizeof(ethernet_hdr), data_size+sizeof(ip_hdr));
+  memcpy(ret.data()+sizeof(ethernet_hdr), &hdr, sizeof(ip_hdr));
+  return ret;
+}
+
+Buffer createARPPacket(bool request, const uint8_t source_mac[ETHER_ADDR_LEN], 
+                            uint32_t source_ip,
+                            const uint8_t dest_mac[ETHER_ADDR_LEN],
+                            uint32_t dest_ip) {
   arp_hdr hdr;
   hdr.arp_hrd = htons(arp_hrd_ethernet);
   hdr.arp_pro = htons(0x0800);
-  hdr.arp_op = request ? 1 : 2;
+  hdr.arp_op = htons(request ? 1 : 2);
   hdr.arp_hln = 6;
   hdr.arp_pln = 4;
-  if(request) {
-    for(int i = 0;i<ETHER_ADDR_LEN;i++)
-      hdr.arp_tha[i] = 255;
-  }
-  else {
-    
-  }
+  memcpy(hdr.arp_sha, source_mac, ETHER_ADDR_LEN);
+  memcpy(hdr.arp_tha, dest_mac, ETHER_ADDR_LEN);
+  hdr.arp_sip= source_ip;
+  hdr.arp_tip = dest_ip;
+
+  Buffer ret = createEthernetHeader(source_mac, dest_mac, false);
+  ret.resize(ret.size() + sizeof(arp_hdr));
+  memcpy(ret.data()+sizeof(ethernet_hdr), &hdr, sizeof(arp_hdr));
+  return ret;
 }
 
 

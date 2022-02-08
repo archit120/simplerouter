@@ -19,6 +19,8 @@
 
 #include <fstream>
 
+using namespace std;
+
 namespace simple_router {
 
 //////////////////////////////////////////////////////////////////////////
@@ -57,16 +59,58 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
     const arp_hdr* arpHeader = reinterpret_cast<const arp_hdr*>(header+1);
     // is it an ARP reply?
     if(arpHeader->arp_op == arp_op_reply) {
+      cerr << "Got ARP reply from " << ipToString(arpHeader->arp_sip) << "\n";
+      
       auto requests = m_arp.insertArpEntry(createMACBuffer(arpHeader->arp_sha), arpHeader->arp_sip);
       if(requests == nullptr)
         return;
       for(auto packet : requests->packets) {
         // Rehandle all queued up packets
-        handlePacket(packet, inIface);
+        handlePacket(packet.packet, packet.iface);
       }
     } else {
-      
+      // is ARP request for us?
+      cerr << "Got ARP request for " << ipToString(arpHeader->arp_tip) << "\n";
+
+      if(arpHeader->arp_tip != iface->ip) {
+        cerr << "Ignoring received request because it not for us\n";
+        return;
+      }
+
+      // Request for us so we have to reply.
+      Buffer responsePacket = createARPPacket(false, iface->addr.data(), iface->ip, arpHeader->arp_sha, arpHeader->arp_sip);
+      sendPacket(responsePacket, inIface);    
     }
+  } else {
+    const ip_hdr* ipHeader = reinterpret_cast<const ip_hdr*>(header+1);
+    uint16_t ipcksum = ~cksum(ipHeader, ntohs(ipHeader->ip_len));
+    if(ipcksum || ntohs(ipHeader->ip_len) < 21) {
+      cerr << "Invalid IP Packet. Ignoring\n" ;
+      return;
+    }
+    cerr << "Got an IP Packet for ";
+    if(ipHeader->ip_dst != iface->ip) {
+      cerr << "someone else. Routing\n";
+    } else {
+      if(ipHeader->ip_p != 1) {
+        cerr << "Unknown protocol. Ignoring\n";
+        return;
+      } 
+      cerr << "us with ICMP data. Create Response\n";
+
+      auto responsePacket = createIPPacket(iface->addr.data(), iface->ip, header->ether_shost, ipHeader->ip_src,
+        0,0,64, 1);
+      print_hdr_ip(responsePacket.data() + sizeof(ethernet_hdr));
+      cerr << cksum(responsePacket.data() + sizeof(ethernet_hdr), sizeof(ip_hdr));
+      const icmp_hdr* icmpHeader = reinterpret_cast<const icmp_hdr*>(ipHeader + 1);
+      uint16_t icmpcksum = ~cksum(icmpHeader, icmpHeader->)
+      if(icmpHeader->icmp_type == 1) {
+
+      }
+      // icmpHeader
+    }
+
+    print_hdr_ip(packet.data() + sizeof(ethernet_hdr));
   }
   
 }
