@@ -107,13 +107,14 @@ Buffer createIPPacket(const uint8_t source_mac[ETHER_ADDR_LEN],
   hdr.ip_hl = 5;
   hdr.ip_tos = 0;
   hdr.ip_len = htons(data_size+sizeof(ip_hdr));
-  hdr.ip_off = IP_DF;
+  hdr.ip_off = htons(IP_DF);
   hdr.ip_ttl = ttl;
   hdr.ip_p = protocol;
   hdr.ip_sum = 0;
   hdr.ip_src = source_ip;
   hdr.ip_dst = dest_ip;
-  Buffer ret = createEthernetHeader(source_mac, dest_mac, false);
+  hdr.ip_id = time(0);
+  Buffer ret = createEthernetHeader(source_mac, dest_mac, true);
   ret.resize(ret.size() + sizeof(ip_hdr) + data_size);
   memcpy(ret.data()+sizeof(ethernet_hdr), &hdr, sizeof(ip_hdr));
   memcpy(ret.data()+sizeof(ethernet_hdr)+sizeof(ip_hdr), data, data_size);

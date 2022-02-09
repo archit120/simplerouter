@@ -37,7 +37,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
     return;
   }
 
-  std::cerr << getRoutingTable() << std::endl;
+  // std::cerr << getRoutingTable() << std::endl;
 
 // TODO
 
@@ -98,19 +98,37 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
       } 
       cerr << "us with ICMP data. Create Response\n";
 
-      auto responsePacket = createIPPacket(iface->addr.data(), iface->ip, header->ether_shost, ipHeader->ip_src,
-        0,0,64, 1);
-      print_hdr_ip(responsePacket.data() + sizeof(ethernet_hdr));
-      cerr << cksum(responsePacket.data() + sizeof(ethernet_hdr), sizeof(ip_hdr));
       const icmp_hdr* icmpHeader = reinterpret_cast<const icmp_hdr*>(ipHeader + 1);
-      uint16_t icmpcksum = ~cksum(icmpHeader, icmpHeader->)
-      if(icmpHeader->icmp_type == 1) {
-
+      uint16_t ipDataLen = ntohs(ipHeader->ip_len) - sizeof(ip_hdr);
+      uint16_t icmpcksum = ~cksum(icmpHeader, ipDataLen);
+      // cerr << icmpcksum << " " << ipHeader->ip_len << " " <<  sizeof(ip_hdr) << "\n";
+      if(icmpcksum != 0) {
+        cerr << "ICMP packet invalid cheksum. Ignoring\n";
+        return;
       }
+        Buffer icmpDataBuffer;
+
+      if(icmpHeader->icmp_type == 8) {
+          icmp_hdr responseIcmpHeader;
+          responseIcmpHeader.icmp_code = 0;
+          responseIcmpHeader.icmp_type = 0;
+          responseIcmpHeader.identifier = icmpHeader->identifier;
+          responseIcmpHeader.seqno = icmpHeader->seqno;
+          icmpDataBuffer.resize(ipDataLen);
+          memcpy(icmpDataBuffer.data()+sizeof(icmp_hdr), icmpHeader+1, ipDataLen-sizeof(icmp_hdr));
+          memcpy(icmpDataBuffer.data(), &responseIcmpHeader, sizeof(icmp_hdr));
+          responseIcmpHeader.icmp_sum = cksum(icmpDataBuffer.data(), icmpDataBuffer.size());
+          memcpy(icmpDataBuffer.data(), &responseIcmpHeader, sizeof(icmp_hdr));
+      } else {
+        cerr << "Unkown ICMP type\n";
+        return;
+      }
+      auto responsePacket = createIPPacket(iface->addr.data(), iface->ip, header->ether_shost, ipHeader->ip_src, 
+        icmpDataBuffer.data(), icmpDataBuffer.size(),64, 1);
+      sendPacket(responsePacket, inIface);
       // icmpHeader
     }
 
-    print_hdr_ip(packet.data() + sizeof(ethernet_hdr));
   }
   
 }

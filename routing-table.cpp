@@ -31,7 +31,7 @@ namespace simple_router {
 RoutingTableEntry
 RoutingTable::lookup(uint32_t ip) const
 {
-
+  uint8_t currentLongestMatch = 0;
   // FILL THIS IN
 
   throw std::runtime_error("Routing entry not found");
