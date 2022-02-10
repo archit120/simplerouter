@@ -54,11 +54,11 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
   }
 
 // Handle ARP Packets first
-
+  print_hdrs(packet);
   if(ethertype(packet.data()) == ethertype_arp) {
     const arp_hdr* arpHeader = reinterpret_cast<const arp_hdr*>(header+1);
     // is it an ARP reply?
-    if(arpHeader->arp_op == arp_op_reply) {
+    if(ntohs(arpHeader->arp_op) == arp_op_reply) {
       cerr << "Got ARP reply from " << ipToString(arpHeader->arp_sip) << "\n";
       
       auto requests = m_arp.insertArpEntry(createMACBuffer(arpHeader->arp_sha), arpHeader->arp_sip);
@@ -68,6 +68,8 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
         // Rehandle all queued up packets
         handlePacket(packet.packet, packet.iface);
       }
+      // possible race but unfixable
+      m_arp.removeRequest(requests);
     } else {
       // is ARP request for us?
       cerr << "Got ARP request for " << ipToString(arpHeader->arp_tip) << "\n";
@@ -84,13 +86,43 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
   } else {
     const ip_hdr* ipHeader = reinterpret_cast<const ip_hdr*>(header+1);
     uint16_t ipcksum = ~cksum(ipHeader, ntohs(ipHeader->ip_len));
-    if(ipcksum || ntohs(ipHeader->ip_len) < 21) {
+    if(ipcksum || ntohs(ipHeader->ip_len) < 20) {
       cerr << "Invalid IP Packet. Ignoring\n" ;
       return;
     }
     cerr << "Got an IP Packet for ";
     if(ipHeader->ip_dst != iface->ip) {
-      cerr << "someone else. Routing\n";
+      cerr << "someone else. Checking first for different interface on this router\n";
+      auto routedInterface = findIfaceByIp(ipHeader->ip_dst);
+      Buffer routedPacket = packet;
+      ethernet_hdr* routedEthernetHeader = reinterpret_cast<ethernet_hdr*>(routedPacket.data());
+      ip_hdr* routedIpHeader = reinterpret_cast<ip_hdr*>(routedEthernetHeader+1);
+      if(routedInterface != nullptr) {
+        cerr << "IP packet destined for different interface on same device\n";
+        // memcpy(routedEthernetHeader->ether_shost, iface->addr.data(), ETHER_ADDR_LEN);
+        memcpy(routedEthernetHeader->ether_dhost, routedInterface->addr.data(), ETHER_ADDR_LEN);
+        routedIpHeader->ip_ttl--;
+        routedIpHeader->ip_sum = 0;
+        routedIpHeader->ip_sum = cksum(routedIpHeader, ntohs(routedIpHeader->ip_len));
+        handlePacket(routedPacket, routedInterface->name);
+      } else {
+        cerr << "IP packet destined for different interface on different device\n";
+        RoutingTableEntry routing = m_routingTable.lookup(ipHeader->ip_dst);
+        cerr << "First checking if ARP cache knows where this goes\n"; 
+        auto lookup = m_arp.lookup(routedIpHeader->ip_dst);
+        if(lookup!=nullptr) {
+          cerr << "ARP entry found. Use it\n";
+          memcpy(routedEthernetHeader->ether_shost, findIfaceByName(routing.ifName)->addr.data(), ETHER_ADDR_LEN);
+          memcpy(routedEthernetHeader->ether_dhost, lookup->mac.data(), ETHER_ADDR_LEN);
+          routedIpHeader->ip_ttl--;
+          routedIpHeader->ip_sum = 0;
+          routedIpHeader->ip_sum = cksum(routedIpHeader, ntohs(routedIpHeader->ip_len));
+          sendPacket(routedPacket, routing.ifName);
+        } else {
+          cerr << "No ARP entry. Queue this packet\n";
+          m_arp.queueRequest(routedIpHeader->ip_dst, routedPacket, routing.ifName);
+        }
+      }
     } else {
       if(ipHeader->ip_p != 1) {
         cerr << "Unknown protocol. Ignoring\n";
@@ -125,7 +157,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
       }
       auto responsePacket = createIPPacket(iface->addr.data(), iface->ip, header->ether_shost, ipHeader->ip_src, 
         icmpDataBuffer.data(), icmpDataBuffer.size(),64, 1);
-      sendPacket(responsePacket, inIface);
+      sendPacket(responsePacket, m_routingTable.lookup(ipHeader->ip_src).ifName);
       // icmpHeader
     }
 

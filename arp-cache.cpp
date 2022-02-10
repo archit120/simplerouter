@@ -31,7 +31,25 @@ void
 ArpCache::periodicCheckArpRequestsAndCacheEntries()
 {
 
-  // FILL THIS IN
+    for(auto request : m_arpRequests) {
+      auto iface = m_router.findIfaceByName(m_router.getRoutingTable().lookup(request->ip).ifName);
+      std::cerr << iface <<"\n";
+      auto packet = createARPPacket(true, iface->addr.data(), iface->ip, Buffer(ETHER_ADDR_LEN, 255).data(), request->ip);
+      print_hdrs(packet);
+      m_router.sendPacket(packet, iface->name);
+      request->nTimesSent++;
+      if(request->nTimesSent > 5) {
+        std::cerr << "Unreachable\n";
+      }
+    }
+    auto it = m_cacheEntries.begin();
+    while(it!=m_cacheEntries.end()) {
+      auto& entry = *it;
+      if(!entry->isValid) 
+        m_cacheEntries.erase(it++);
+      else
+        it++;
+    }
 
 }
 //////////////////////////////////////////////////////////////////////////
