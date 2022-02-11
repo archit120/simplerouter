@@ -52,9 +52,9 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
     std::cerr << "Received packet, but incorrect MAC, ignoring." << std::endl;
     return;
   }
+  print_hdrs(packet);
 
 // Handle ARP Packets first
-  print_hdrs(packet);
   if(ethertype(packet.data()) == ethertype_arp) {
     const arp_hdr* arpHeader = reinterpret_cast<const arp_hdr*>(header+1);
     // is it an ARP reply?
@@ -85,7 +85,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
     }
   } else {
     const ip_hdr* ipHeader = reinterpret_cast<const ip_hdr*>(header+1);
-    uint16_t ipcksum = ~cksum(ipHeader, ntohs(ipHeader->ip_len));
+    uint16_t ipcksum = ~cksum(ipHeader, sizeof(ip_hdr));
     if(ipcksum || ntohs(ipHeader->ip_len) < 20) {
       cerr << "Invalid IP Packet. Ignoring\n" ;
       return;
@@ -101,9 +101,9 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
         cerr << "IP packet destined for different interface on same device\n";
         // memcpy(routedEthernetHeader->ether_shost, iface->addr.data(), ETHER_ADDR_LEN);
         memcpy(routedEthernetHeader->ether_dhost, routedInterface->addr.data(), ETHER_ADDR_LEN);
-        routedIpHeader->ip_ttl--;
-        routedIpHeader->ip_sum = 0;
-        routedIpHeader->ip_sum = cksum(routedIpHeader, ntohs(routedIpHeader->ip_len));
+        // routedIpHeader->ip_ttl--;
+        // routedIpHeader->ip_sum = 0;
+        // routedIpHeader->ip_sum = cksum(routedIpHeader, sizeof(ip_hdr));
         handlePacket(routedPacket, routedInterface->name);
       } else {
         cerr << "IP packet destined for different interface on different device\n";
@@ -116,16 +116,24 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
           memcpy(routedEthernetHeader->ether_dhost, lookup->mac.data(), ETHER_ADDR_LEN);
           routedIpHeader->ip_ttl--;
           routedIpHeader->ip_sum = 0;
-          routedIpHeader->ip_sum = cksum(routedIpHeader, ntohs(routedIpHeader->ip_len));
-          sendPacket(routedPacket, routing.ifName);
+          routedIpHeader->ip_sum = cksum(routedIpHeader, sizeof(ip_hdr));
+          if(routedIpHeader->ip_ttl)
+            sendPacket(routedPacket, routing.ifName);
+          else {
+            cerr << "Packet expired\n";
+            sendPacket(createICMPSpecial(true, header, ipHeader, iface->ip), inIface);
+          }
         } else {
           cerr << "No ARP entry. Queue this packet\n";
-          m_arp.queueRequest(routedIpHeader->ip_dst, routedPacket, routing.ifName);
+          m_arp.queueRequest(routedIpHeader->ip_dst, routedPacket, inIface);
         }
       }
     } else {
       if(ipHeader->ip_p != 1) {
-        cerr << "Unknown protocol. Ignoring\n";
+        cerr << "Unknown protocol. Sending ICMP destination unreachable\n";
+        auto responsePacket = createICMPSpecial(false, header, ipHeader, iface->ip);
+        print_hdrs(responsePacket);
+        sendPacket(responsePacket, m_routingTable.lookup(ipHeader->ip_src).ifName);
         return;
       } 
       cerr << "us with ICMP data. Create Response\n";

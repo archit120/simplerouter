@@ -52,6 +52,7 @@ Buffer createIPPacket(const uint8_t source_mac[ETHER_ADDR_LEN],
                             uint8_t ttl, uint8_t protocol
                             );
 Buffer getICMPResponse();
+Buffer createICMPSpecial(bool timeExceeded, const ethernet_hdr* ether, const ip_hdr* ip, uint32_t source_ip);
 /**
  * Get formatted Ethernet address, e.g. 00:11:22:33:44:55
  */

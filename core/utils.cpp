@@ -144,6 +144,18 @@ Buffer createARPPacket(bool request, const uint8_t source_mac[ETHER_ADDR_LEN],
   return ret;
 }
 
+Buffer createICMPSpecial(bool timeExceeded, const ethernet_hdr* ether, const ip_hdr* ip, uint32_t source_ip) {
+  icmp_hdr icmp;
+  icmp.icmp_type = timeExceeded ? 11 : 3;
+  icmp.icmp_code = timeExceeded ? 0 : 3;
+  uint16_t extra = std::min((uint16_t)64, ntohs(ip->ip_len-sizeof(ip_hdr)));
+  Buffer data(sizeof(icmp_hdr) + sizeof(ip_hdr) + extra, 0);
+  memcpy(data.data(), &icmp, sizeof(icmp_hdr));
+  memcpy(data.data()+sizeof(icmp_hdr), ip, sizeof(ip_hdr)+extra);
+  icmp.icmp_sum = cksum(data.data(), data.size());
+  memcpy(data.data(), &icmp, sizeof(icmp_hdr));
+  return createIPPacket(ether->ether_dhost, source_ip, ether->ether_shost, ip->ip_src, data.data(), data.size(), 64, 1);
+}
 
 std::string
 macToString(const Buffer& macAddr)
